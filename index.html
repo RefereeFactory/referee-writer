@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>The Referee's Writing Studio</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #0a0a0c; color: #e6e6e6;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  .wrap { max-width: 820px; margin: 0 auto; padding: 22px 16px 80px; }
+  .eyebrow { text-align: center; letter-spacing: 4px; font-size: 11px; color: #777; font-weight: 700; }
+  h1 { text-align: center; font-size: 22px; color: #f0a500; margin: 6px 0 2px; }
+  .sub { text-align: center; font-size: 12.5px; color: #999; margin-bottom: 16px; }
+  #gate { text-align: center; color: #bbb; padding: 40px 0; }
+  #gate a { color: #f0a500; }
+  .g-btn { background: #fff; color: #222; border: none; border-radius: 10px; padding: 12px 18px;
+    font-size: 15px; font-weight: 700; cursor: pointer; }
+
+  .bar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; }
+  .btn { background: #141418; border: 1px solid #2c2c33; color: #ddd; border-radius: 8px;
+    padding: 9px 13px; font-size: 13px; cursor: pointer; }
+  .btn.gold { border-color: #f0a500; color: #f0a500; }
+  .btn.on { background: #7a1f1f; border-color: #e05656; color: #fff; }
+
+  .layout { display: grid; grid-template-columns: 240px 1fr; gap: 14px; }
+  @media (max-width: 680px) { .layout { grid-template-columns: 1fr; } }
+  .list { background: #101014; border: 1px solid #2c2c33; border-radius: 12px; padding: 8px; height: fit-content; }
+  .chap { padding: 9px 10px; border-radius: 8px; cursor: pointer; font-size: 13.5px; color: #ccc;
+    border: 1px solid transparent; display: flex; justify-content: space-between; gap: 6px; }
+  .chap:hover { background: #17171c; }
+  .chap.active { border-color: #f0a500; color: #fff; background: #17130a; }
+  .chap .st { font-size: 10px; color: #777; }
+  .chap.pub .st { color: #7fc783; }
+
+  .editor { background: #101014; border: 1px solid #2c2c33; border-radius: 12px; padding: 14px; }
+  #chTitle { width: 100%; padding: 11px; background: #0d0d0f; border: 1px solid #2c2c33; border-radius: 8px;
+    color: #f0a500; font-size: 17px; font-weight: 700; margin-bottom: 10px; }
+  #chBody { width: 100%; min-height: 52vh; padding: 13px; background: #0d0d0f; border: 1px solid #2c2c33;
+    border-radius: 8px; color: #eee; font-size: 16px; line-height: 1.8; resize: vertical;
+    font-family: Georgia, 'Times New Roman', serif; }
+  #status { font-size: 12px; color: #7fc783; min-height: 16px; margin-top: 8px; }
+  .count { font-size: 11.5px; color: #777; }
+  .hint { font-size: 11.5px; color: #777; line-height: 1.6; margin-top: 6px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="eyebrow">REFEREE INNOVATIONS</div>
+  <h1>✍️ The Referee's Writing Studio</h1>
+  <div class="sub">Your book, written by you — dictate or type, hear it read back, add chapters whenever you wish.</div>
+
+  <div id="gate">Checking…</div>
+
+  <div id="studio" style="display:none;">
+    <div class="bar">
+      <button class="btn gold" onclick="newChapter()">＋ New chapter</button>
+      <button class="btn" id="dictateBtn" onclick="toggleDictate()">🎙 Dictate</button>
+      <button class="btn" id="narrateBtn" onclick="toggleNarrate()">🔊 Read it back</button>
+      <button class="btn" onclick="saveChapter()">💾 Save</button>
+      <button class="btn" onclick="togglePublish()" id="pubBtn">👁 Publish</button>
+      <span class="count" id="count"></span>
+    </div>
+
+    <div class="bar" style="border-top:1px solid #2c2c33;padding-top:10px;">
+      <span style="font-size:12px;color:#888;">Make this chapter a podcast episode:</span>
+      <button class="btn" id="recBtn" onclick="toggleRecord()">🎤 Record my own voice</button>
+      <select id="voicePick" style="background:#141418;border:1px solid #2c2c33;color:#ddd;border-radius:8px;padding:8px;font-size:13px;">
+        <option value="">choose a voice…</option>
+      </select>
+      <button class="btn gold" onclick="narrateWithVoice()">🗣 Narrate with chosen voice</button>
+      <span id="audioState" style="font-size:12px;color:#7fc783;"></span>
+    </div>
+    <div class="bar" id="audioRow" style="display:none;">
+      <audio id="chapAudio" controls style="width:100%;"></audio>
+    </div>
+
+    <div class="layout">
+      <div class="list" id="chapList"></div>
+      <div class="editor">
+        <input id="chTitle" placeholder="Chapter title">
+        <textarea id="chBody" placeholder="Write here — or press 🎙 Dictate and speak. Your words, your order."></textarea>
+        <div id="status"></div>
+        <div class="hint" id="dictHint"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const SB_URL = 'https://canvbkibjgcnqowjtarf.supabase.co';
+const SB_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNhbnZia2liamdjbnFvd2p0YXJmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM3NzE0NDYsImV4cCI6MjA5OTM0NzQ0Nn0.TLskVoTaYI90avy09IuM_kkKvAYUMETTntZkn2M807I';
+const sb = window.supabase.createClient(SB_URL, SB_ANON);
+
+let chapters = [];
+let current = null;   // the chapter being edited
+let dirty = false;
+
+const $ = (id) => document.getElementById(id);
+$('chBody').addEventListener('input', () => { dirty = true; updateCount(); });
+$('chTitle').addEventListener('input', () => { dirty = true; });
+
+function updateCount() {
+  const words = ($('chBody').value.trim().match(/\S+/g) || []).length;
+  $('count').textContent = words + ' words';
+}
+
+async function boot() {
+  const { data: { session } } = await sb.auth.getSession();
+  if (!session) {
+    $('gate').innerHTML = '<button class="g-btn" onclick="signIn()">Sign in with Google to write</button>';
+    return;
+  }
+  const { data: me } = await sb.from('users').select('is_founder').eq('auth_id', session.user.id).single();
+  if (!me || !me.is_founder) { $('gate').textContent = 'This studio is for the Referee alone.'; return; }
+  $('gate').style.display = 'none';
+  $('studio').style.display = 'block';
+  await loadChapters();
+}
+async function signIn() {
+  await sb.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: location.origin + location.pathname } });
+}
+sb.auth.onAuthStateChange(() => boot());
+
+async function loadChapters() {
+  const { data, error } = await sb.from('book_chapters')
+    .select('id,title,body,sort,published,narrated_file,audio_kind,updated_at')
+    .order('sort', { ascending: true }).order('created_at', { ascending: true });
+  if (error) { $('status').textContent = 'Could not load: ' + error.message + ' (run writer_setup.sql?)'; return; }
+  chapters = data || [];
+  renderList();
+  if (!current && chapters.length) selectChapter(chapters[0].id);
+  else if (!chapters.length) newChapter();
+}
+
+function renderList() {
+  const el = $('chapList');
+  el.innerHTML = chapters.map(c =>
+    '<div class="chap ' + (c.published ? 'pub ' : '') + (current && c.id === current.id ? 'active' : '') + '" onclick="selectChapter(\'' + c.id + '\')">' +
+    '<span>' + esc(c.title || 'Untitled') + '</span>' +
+    '<span class="st">' + (c.published ? 'live' : 'draft') + '</span></div>'
+  ).join('') || '<div class="hint">No chapters yet. Press ＋ New chapter.</div>';
+}
+function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+
+async function selectChapter(id) {
+  if (dirty && !confirm('You have unsaved changes. Leave this chapter without saving?')) return;
+  stopDictate(); stopNarrate();
+  current = chapters.find(c => c.id === id) || null;
+  if (current) { $('chTitle').value = current.title || ''; $('chBody').value = current.body || ''; }
+  dirty = false; updateCount(); renderList(); paintPub(); showChapterAudio();
+}
+
+function newChapter() {
+  stopDictate(); stopNarrate();
+  const nextSort = chapters.length ? Math.max(...chapters.map(c => c.sort)) + 1 : 100;
+  current = { id: null, title: '', body: '', sort: nextSort, published: false, narrated_file: null };
+  $('chTitle').value = ''; $('chBody').value = ''; dirty = false; updateCount(); paintPub(); showChapterAudio();
+  $('chTitle').focus();
+}
+
+async function saveChapter() {
+  if (!current) return;
+  const title = $('chTitle').value.trim();
+  const body = $('chBody').value;
+  if (!title) { $('status').textContent = 'Give the chapter a title first.'; return; }
+  const row = { title, body, sort: current.sort, published: current.published, updated_at: new Date().toISOString() };
+  let res;
+  if (current.id) res = await sb.from('book_chapters').update(row).eq('id', current.id).select().single();
+  else res = await sb.from('book_chapters').insert(row).select().single();
+  if (res.error) { $('status').textContent = 'Save failed: ' + res.error.message; return; }
+  current = res.data; dirty = false;
+  $('status').textContent = '✓ Saved ' + new Date().toLocaleTimeString();
+  await loadChapters(); selectChapterQuiet(current.id);
+}
+function selectChapterQuiet(id){ current = chapters.find(c=>c.id===id)||current; renderList(); paintPub(); }
+
+function paintPub() {
+  $('pubBtn').textContent = (current && current.published) ? '🌕 Published (tap to unpublish)' : '👁 Publish';
+  $('pubBtn').classList.toggle('gold', !!(current && current.published));
+}
+async function togglePublish() {
+  if (!current || !current.id) { $('status').textContent = 'Save the chapter first.'; return; }
+  const next = !current.published;
+  const res = await sb.from('book_chapters').update({ published: next, updated_at: new Date().toISOString() }).eq('id', current.id).select().single();
+  if (res.error) { $('status').textContent = 'Failed: ' + res.error.message; return; }
+  current = res.data; $('status').textContent = next ? '✓ Chapter is live for readers.' : 'Chapter hidden (draft).';
+  await loadChapters(); selectChapterQuiet(current.id); paintPub();
+}
+
+/* ---- Speech to text: your voice becomes text on the page ---- */
+let rec = null, recOn = false;
+function toggleDictate() { recOn ? stopDictate() : startDictate(); }
+function startDictate() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) { $('dictHint').textContent = 'Dictation needs Chrome or Safari. On iPhone, tap the microphone on the keyboard instead.'; return; }
+  rec = new SR();
+  rec.lang = 'en-GB'; rec.continuous = true; rec.interimResults = true;
+  let base = $('chBody').value;
+  if (base && !base.endsWith(' ') && !base.endsWith('\n')) base += ' ';
+  rec.onresult = (e) => {
+    let finalTxt = '';
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      if (e.results[i].isFinal) finalTxt += e.results[i][0].transcript;
+    }
+    if (finalTxt) { base += finalTxt; $('chBody').value = base; dirty = true; updateCount(); }
+  };
+  rec.onerror = (e) => { $('dictHint').textContent = 'Dictation stopped: ' + e.error; stopDictate(); };
+  rec.onend = () => { if (recOn) rec.start(); };  // keep going through natural pauses
+  rec.start(); recOn = true;
+  $('dictateBtn').classList.add('on'); $('dictateBtn').textContent = '⏹ Stop dictation';
+  $('dictHint').textContent = 'Listening… speak naturally. Say the punctuation is added by you afterward, or use the keyboard.';
+}
+function stopDictate() {
+  recOn = false;
+  if (rec) { try { rec.stop(); } catch (_) {} rec = null; }
+  $('dictateBtn').classList.remove('on'); $('dictateBtn').textContent = '🎙 Dictate';
+}
+
+/* ---- Read it back: hear your text in a voice, on the fly ---- */
+let narrOn = false;
+function toggleNarrate() { narrOn ? stopNarrate() : startNarrate(); }
+function startNarrate() {
+  const text = $('chBody').value.trim();
+  if (!text) { $('status').textContent = 'Nothing to read yet.'; return; }
+  if (!('speechSynthesis' in window)) { $('status').textContent = 'This browser cannot read aloud.'; return; }
+  const u = new SpeechSynthesisUtterance(text);
+  u.lang = 'en-GB'; u.rate = 0.98;
+  const gb = speechSynthesis.getVoices().find(v => /en-GB/i.test(v.lang));
+  if (gb) u.voice = gb;
+  u.onend = () => stopNarrate();
+  speechSynthesis.cancel(); speechSynthesis.speak(u);
+  narrOn = true; $('narrateBtn').classList.add('on'); $('narrateBtn').textContent = '⏹ Stop reading';
+}
+function stopNarrate() {
+  narrOn = false;
+  if ('speechSynthesis' in window) speechSynthesis.cancel();
+  $('narrateBtn').classList.remove('on'); $('narrateBtn').textContent = '🔊 Read it back';
+}
+
+/* ---- Podcast audio: your own voice OR a chosen ElevenLabs voice ---- */
+const AUDIO_BASE = SB_URL + '/storage/v1/object/public/book-audio/';
+let voicesLoaded = false;
+
+function showChapterAudio() {
+  const row = $('audioRow'), au = $('chapAudio'), st = $('audioState');
+  if (current && current.narrated_file) {
+    au.src = AUDIO_BASE + current.narrated_file + '?t=' + Date.now();
+    row.style.display = 'flex';
+    st.textContent = current.audio_kind === 'own' ? '🎤 your recording' : '🗣 voice narration';
+  } else { row.style.display = 'none'; au.removeAttribute('src'); st.textContent = 'no audio yet'; }
+}
+
+async function loadVoices() {
+  if (voicesLoaded) return;
+  const { data: { session } } = await sb.auth.getSession();
+  if (!session) return;
+  try {
+    const r = await fetch(SB_URL + '/functions/v1/book-narrate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + session.access_token },
+      body: JSON.stringify({ action: 'voices' })
+    });
+    const d = await r.json();
+    if (d.voices) {
+      const sel = $('voicePick');
+      d.voices.forEach(v => { const o = document.createElement('option'); o.value = v.id; o.textContent = v.name; sel.appendChild(o); });
+      // default to Chris if present
+      const chris = d.voices.find(v => /^chris/i.test(v.name));
+      if (chris) sel.value = chris.id;
+      voicesLoaded = true;
+    }
+  } catch (_) { /* voices optional */ }
+}
+
+let mediaRec = null, recChunks = [], recording = false;
+async function toggleRecord() {
+  if (recording) { mediaRec.stop(); return; }
+  if (!current || !current.id) { $('audioState').textContent = 'Save the chapter first, then record.'; return; }
+  let stream;
+  try { stream = await navigator.mediaDevices.getUserMedia({ audio: true }); }
+  catch (_) { $('audioState').textContent = 'Microphone permission needed.'; return; }
+  recChunks = [];
+  mediaRec = new MediaRecorder(stream);
+  mediaRec.ondataavailable = e => { if (e.data.size) recChunks.push(e.data); };
+  mediaRec.onstop = async () => {
+    stream.getTracks().forEach(t => t.stop());
+    $('recBtn').classList.remove('on'); $('recBtn').textContent = '🎤 Record my own voice';
+    recording = false;
+    const blob = new Blob(recChunks, { type: mediaRec.mimeType || 'audio/mp4' });
+    const ext = (blob.type.includes('mp4') || blob.type.includes('aac')) ? 'm4a' : blob.type.includes('ogg') ? 'ogg' : 'webm';
+    const file = 'chapter-' + current.id + '-own.' + ext;
+    $('audioState').textContent = 'Uploading your recording…';
+    const upl = await sb.storage.from('book-audio').upload(file, blob, { contentType: blob.type, upsert: true });
+    if (upl.error) { $('audioState').textContent = 'Upload failed: ' + upl.error.message + ' (run listen_dictation.sql for upload rights?)'; return; }
+    const res = await sb.from('book_chapters').update({ narrated_file: file, audio_kind: 'own', updated_at: new Date().toISOString() }).eq('id', current.id).select().single();
+    if (res.error) { $('audioState').textContent = 'Saved audio but not linked: ' + res.error.message; return; }
+    current = res.data; $('audioState').textContent = '✓ Your voice recording saved.'; showChapterAudio(); await loadChapters(); selectChapterQuiet(current.id);
+  };
+  mediaRec.start(); recording = true;
+  $('recBtn').classList.add('on'); $('recBtn').textContent = '⏹ Stop recording';
+  $('audioState').textContent = 'Recording your voice… read the chapter aloud, then Stop.';
+}
+
+async function narrateWithVoice() {
+  if (!current || !current.id) { $('audioState').textContent = 'Save the chapter first.'; return; }
+  const voiceId = $('voicePick').value;
+  if (!voiceId) { $('audioState').textContent = 'Choose a voice from the menu first.'; return; }
+  $('audioState').textContent = 'Narrating with the chosen voice… (a moment)';
+  const { data: { session } } = await sb.auth.getSession();
+  const r = await fetch(SB_URL + '/functions/v1/book-narrate', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + session.access_token },
+    body: JSON.stringify({ action: 'narrate', chapterId: current.id, voiceId })
+  });
+  const d = await r.json();
+  if (!r.ok || d.error) { $('audioState').textContent = 'Narration failed: ' + (d.error || r.status); return; }
+  current.narrated_file = d.file; current.audio_kind = 'voice';
+  $('audioState').textContent = '✓ Voice narration ready.'; showChapterAudio(); await loadChapters(); selectChapterQuiet(current.id);
+}
+
+window.addEventListener('beforeunload', (e) => { if (dirty) { e.preventDefault(); e.returnValue = ''; } });
+boot().then(loadVoices);
+</script>
+</body>
+</html>
