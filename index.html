@@ -54,6 +54,10 @@
   <div id="gate">Checking…</div>
 
   <div id="studio" style="display:none;">
+    <div id="deployBar" style="display:none;text-align:center;margin-bottom:10px;">
+      <button class="btn" id="deployBtn" onclick="toggleDeploy()">🚀 Deploy to main Factory</button>
+      <span id="deployMsg" style="font-size:11.5px;color:#888;margin-left:6px;"></span>
+    </div>
     <div class="bar">
       <button class="btn gold" onclick="newChapter()">＋ New chapter</button>
       <button class="btn" id="dictateBtn" onclick="toggleDictate()">🎙 Dictate</button>
@@ -116,7 +120,22 @@ async function boot() {
   if (!me || !me.is_founder) { $('gate').textContent = 'This studio is for the Referee alone.'; return; }
   $('gate').style.display = 'none';
   $('studio').style.display = 'block';
+  $('deployBar').style.display = 'block';
+  refreshDeploy();
   await loadChapters();
+}
+
+const FEATURE = { key: 'writer', name: 'Writing Studio', url: location.origin + '/', section: 'academy', tagline: 'Write or dictate a book; record your voice or narrate it.', icon: '✍️' };
+let featurePromoted = false;
+async function refreshDeploy() {
+  try { const { data } = await sb.from('factory_features').select('promoted').eq('key', FEATURE.key).maybeSingle(); featurePromoted = !!(data && data.promoted); } catch (_) {}
+  const b = $('deployBtn'); if (b) b.textContent = featurePromoted ? '✓ Live in the Factory — tap to remove' : '🚀 Deploy to main Factory';
+}
+async function toggleDeploy() {
+  const next = !featurePromoted;
+  const { error } = await sb.from('factory_features').upsert({ key: FEATURE.key, name: FEATURE.name, url: FEATURE.url, section: FEATURE.section, tagline: FEATURE.tagline, icon: FEATURE.icon, promoted: next, updated_at: new Date().toISOString() });
+  $('deployMsg').textContent = error ? 'Failed: ' + error.message : (next ? '✓ Now live in the Factory.' : 'Removed.');
+  refreshDeploy();
 }
 async function signIn() {
   await sb.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: location.origin + location.pathname } });
@@ -154,7 +173,7 @@ async function selectChapter(id) {
 
 function newChapter() {
   stopDictate(); stopNarrate();
-  const nextSort = chapters.length ? Math.max(...chapters.map(c => c.sort)) + 1 : 100;
+  const nextSort = chapters.length ? Math.max(...chapters.map(c => Number(c.sort) || 0)) + 1 : 100;
   current = { id: null, title: '', body: '', sort: nextSort, published: false, narrated_file: null };
   $('chTitle').value = ''; $('chBody').value = ''; dirty = false; updateCount(); paintPub(); showChapterAudio();
   $('chTitle').focus();
